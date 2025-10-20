@@ -1,0 +1,51 @@
+name: 'Yandex CDN Invalidator'
+description: 'Purge Yandex Cloud CDN cache for specified paths'
+author: 'Maksim Pogozhii'
+
+branding:
+  icon: 'refresh-cw'
+  color: 'blue'
+
+inputs:
+  resource-id:
+    description: 'Yandex CDN Resource ID (e.g., bc8abcdef123)'
+    required: true
+
+  paths:
+    description: 'Comma-separated paths to purge (e.g., "/index.html, /assets/*"). Leave empty to purge all cache'
+    required: false
+    default: ''
+
+  service-account-key:
+    description: 'Yandex Cloud Service Account authorized key JSON'
+    required: false
+
+  iam-token:
+    description: 'Yandex Cloud IAM token (alternative to service-account-key)'
+    required: false
+
+  wait:
+    description: 'Wait for the cache purge operation to complete'
+    required: false
+    default: 'true'
+
+  timeout:
+    description: 'Maximum wait time in seconds (default: 900 = 15 minutes)'
+    required: false
+    default: '900'
+
+  endpoint:
+    description: 'Custom API endpoint (for testing or private clouds)'
+    required: false
+    default: 'https://cdn.api.cloud.yandex.net'
+
+outputs:
+  operation-id:
+    description: 'Yandex Cloud operation ID for tracking'
+
+  status:
+    description: 'Final operation status (DONE, ERROR, or IN_PROGRESS if not waiting)'
+
+runs:
+  using: node20
+  main: dist/index.js
