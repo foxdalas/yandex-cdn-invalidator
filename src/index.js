@@ -63,7 +63,10 @@ async function run() {
     core.info('');
 
     // Get and validate inputs
-    const resourceId = core.getInput('resource-id', { required: true });
+    let resourceId = core.getInput('resource-id');
+    const resourceCname = core.getInput('resource-cname');
+    const folderId = core.getInput('folder-id');
+    const skipNotFound = core.getInput('skip-not-found') === 'true';
     const pathsInput = core.getInput('paths');
     const serviceAccountKeyJson = core.getInput('service-account-key');
     const iamToken = core.getInput('iam-token');
@@ -71,8 +74,22 @@ async function run() {
     const timeoutInput = core.getInput('timeout');
     const endpoint = core.getInput('endpoint');
 
-    // Validate resource ID
-    validateResourceId(resourceId);
+    if (!resourceId && !resourceCname) {
+      throw new Error('Either resource-id or resource-cname must be provided');
+    }
+
+    if (resourceId && resourceCname) {
+      throw new Error('Only one of resource-id or resource-cname must be provided');
+    }
+
+    if (resourceId) {    
+      // Validate resource ID
+      validateResourceId(resourceId);
+    }
+
+    if (resourceCname && !folderId) {
+      throw new Error('folder-id must be provided when resource-cname is provided');
+    }
 
     // Parse timeout
     const timeout = parseInt(timeoutInput, 10);
@@ -88,6 +105,8 @@ async function run() {
     // Log configuration (without sensitive data)
     core.info('Configuration:');
     core.info(`  Resource ID: ${resourceId}`);
+    core.info(`  Resource CNAME: ${resourceCname}`);
+    core.info(`  Skip not found: ${skipNotFound}`);
     core.info(
       `  Paths: ${paths.length > 0 ? JSON.stringify(paths) : 'ALL (full purge)'}`
     );
@@ -109,6 +128,21 @@ async function run() {
 
     // Create CDN client
     const client = new YandexCDNClient(token, endpoint);
+
+    if (resourceCname) {
+      const resource = await client.getResourceByCname(resourceCname, folderId);
+
+      if (!resource) {
+        if (skipNotFound) {
+          core.warning('Resource not found, skipping...');
+          return;
+        }
+
+        throw new Error(`Resource not found: ${resourceCname}`);
+      }
+
+      resourceId = resource.id;
+    }
 
     // Initiate cache purge
     core.startGroup('Cache Purge');
