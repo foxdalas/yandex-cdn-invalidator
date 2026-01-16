@@ -36612,6 +36612,61 @@ class YandexCDNClient {
   }
 
   /**
+   * Find CDN resource by its CNAME using the List API with pagination
+   * @param {string} resourceCname - CNAME of the resource to search for
+   * @param {string} folderId - Yandex Cloud Folder ID to list resources in
+   * @returns {Promise<Object|null>} Matching resource object or null if not found
+   * @throws {Error} If the list request fails
+   */
+  async getResourceByCname(resourceCname, folderId) {
+    if (!resourceCname || typeof resourceCname !== 'string') {
+      throw new Error('resourceCname is required and must be a string');
+    }
+    if (!folderId || typeof folderId !== 'string') {
+      throw new Error('folderId is required and must be a string');
+    }
+
+    const url = '/cdn/v1/resources';
+    const pageSize = 1000;
+    let pageToken = undefined;
+
+    while (true) {
+      try {
+        const response = await this.cdnClient.get(url, {
+          params: {
+            folderId,
+            pageSize,
+            pageToken,
+          },
+        });
+
+        const resources = response.data?.resources || [];
+        for (const resource of resources) {
+          if (resource?.cname === resourceCname) {
+            return resource;
+          }
+        }
+
+        const nextPageToken = response.data?.nextPageToken;
+        if (!nextPageToken || typeof nextPageToken !== 'string' || nextPageToken.length === 0) {
+          return null;
+        }
+        pageToken = nextPageToken;
+      } catch (error) {
+        if (error.response) {
+          const status = error.response.status;
+          const message =
+            error.response.data?.message || error.response.statusText || 'Unknown error';
+          throw new Error(
+            `Failed to list CDN resources: ${status} - ${message}. Folder: ${folderId}`
+          );
+        }
+        throw new Error(`Failed to list CDN resources: ${error.message}`);
+      }
+    }
+  }
+
+  /**
    * Purge CDN cache for specific paths or all cache
    * @param {string} resourceId - CDN Resource ID
    * @param {string[]} [paths=[]] - Array of paths to purge (empty = full purge)
@@ -36878,7 +36933,10 @@ async function run() {
     core.info('');
 
     // Get and validate inputs
-    const resourceId = core.getInput('resource-id', { required: true });
+    let resourceId = core.getInput('resource-id');
+    const resourceCname = core.getInput('resource-cname');
+    const folderId = core.getInput('folder-id');
+    const skipNotFound = core.getInput('skip-not-found') === 'true';
     const pathsInput = core.getInput('paths');
     const serviceAccountKeyJson = core.getInput('service-account-key');
     const iamToken = core.getInput('iam-token');
@@ -36886,8 +36944,22 @@ async function run() {
     const timeoutInput = core.getInput('timeout');
     const endpoint = core.getInput('endpoint');
 
-    // Validate resource ID
-    validateResourceId(resourceId);
+    if (!resourceId && !resourceCname) {
+      throw new Error('Either resource-id or resource-cname must be provided');
+    }
+
+    if (resourceId && resourceCname) {
+      throw new Error('Only one of resource-id or resource-cname must be provided');
+    }
+
+    if (resourceId) {    
+      // Validate resource ID
+      validateResourceId(resourceId);
+    }
+
+    if (resourceCname && !folderId) {
+      throw new Error('folder-id must be provided when resource-cname is provided');
+    }
 
     // Parse timeout
     const timeout = parseInt(timeoutInput, 10);
@@ -36903,6 +36975,8 @@ async function run() {
     // Log configuration (without sensitive data)
     core.info('Configuration:');
     core.info(`  Resource ID: ${resourceId}`);
+    core.info(`  Resource CNAME: ${resourceCname}`);
+    core.info(`  Skip not found: ${skipNotFound}`);
     core.info(
       `  Paths: ${paths.length > 0 ? JSON.stringify(paths) : 'ALL (full purge)'}`
     );
@@ -36924,6 +36998,21 @@ async function run() {
 
     // Create CDN client
     const client = new YandexCDNClient(token, endpoint);
+
+    if (resourceCname) {
+      const resource = await client.getResourceByCname(resourceCname, folderId);
+
+      if (!resource) {
+        if (skipNotFound) {
+          core.warning('Resource not found, skipping...');
+          return;
+        }
+
+        throw new Error(`Resource not found: ${resourceCname}`);
+      }
+
+      resourceId = resource.id;
+    }
 
     // Initiate cache purge
     core.startGroup('Cache Purge');

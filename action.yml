@@ -18,7 +18,7 @@ inputs:
   folder-id:
     description: 'Yandex Cloud Folder ID (e.g., b1abcdef123)'
     required: false
-  
+
   skip-not-found:
     description: 'Skip if resource not found'
     required: false

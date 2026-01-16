@@ -79,16 +79,20 @@ async function run() {
     }
 
     if (resourceId && resourceCname) {
-      throw new Error('Only one of resource-id or resource-cname must be provided');
+      throw new Error(
+        'Only one of resource-id or resource-cname must be provided'
+      );
     }
 
-    if (resourceId) {    
+    if (resourceId) {
       // Validate resource ID
       validateResourceId(resourceId);
     }
 
     if (resourceCname && !folderId) {
-      throw new Error('folder-id must be provided when resource-cname is provided');
+      throw new Error(
+        'folder-id must be provided when resource-cname is provided'
+      );
     }
 
     // Parse timeout

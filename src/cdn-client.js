@@ -80,7 +80,11 @@ class YandexCDNClient {
         }
 
         const nextPageToken = response.data?.nextPageToken;
-        if (!nextPageToken || typeof nextPageToken !== 'string' || nextPageToken.length === 0) {
+        if (
+          !nextPageToken ||
+          typeof nextPageToken !== 'string' ||
+          nextPageToken.length === 0
+        ) {
           return null;
         }
         pageToken = nextPageToken;
@@ -88,7 +92,9 @@ class YandexCDNClient {
         if (error.response) {
           const status = error.response.status;
           const message =
-            error.response.data?.message || error.response.statusText || 'Unknown error';
+            error.response.data?.message ||
+            error.response.statusText ||
+            'Unknown error';
           throw new Error(
             `Failed to list CDN resources: ${status} - ${message}. Folder: ${folderId}`
           );
