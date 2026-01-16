@@ -44,6 +44,61 @@ class YandexCDNClient {
   }
 
   /**
+   * Find CDN resource by its CNAME using the List API with pagination
+   * @param {string} resourceCname - CNAME of the resource to search for
+   * @param {string} folderId - Yandex Cloud Folder ID to list resources in
+   * @returns {Promise<Object|null>} Matching resource object or null if not found
+   * @throws {Error} If the list request fails
+   */
+  async getResourceByCname(resourceCname, folderId) {
+    if (!resourceCname || typeof resourceCname !== 'string') {
+      throw new Error('resourceCname is required and must be a string');
+    }
+    if (!folderId || typeof folderId !== 'string') {
+      throw new Error('folderId is required and must be a string');
+    }
+
+    const url = '/cdn/v1/resources';
+    const pageSize = 1000;
+    let pageToken = undefined;
+
+    while (true) {
+      try {
+        const response = await this.cdnClient.get(url, {
+          params: {
+            folderId,
+            pageSize,
+            pageToken,
+          },
+        });
+
+        const resources = response.data?.resources || [];
+        for (const resource of resources) {
+          if (resource?.cname === resourceCname) {
+            return resource;
+          }
+        }
+
+        const nextPageToken = response.data?.nextPageToken;
+        if (!nextPageToken || typeof nextPageToken !== 'string' || nextPageToken.length === 0) {
+          return null;
+        }
+        pageToken = nextPageToken;
+      } catch (error) {
+        if (error.response) {
+          const status = error.response.status;
+          const message =
+            error.response.data?.message || error.response.statusText || 'Unknown error';
+          throw new Error(
+            `Failed to list CDN resources: ${status} - ${message}. Folder: ${folderId}`
+          );
+        }
+        throw new Error(`Failed to list CDN resources: ${error.message}`);
+      }
+    }
+  }
+
+  /**
    * Purge CDN cache for specific paths or all cache
    * @param {string} resourceId - CDN Resource ID
    * @param {string[]} [paths=[]] - Array of paths to purge (empty = full purge)

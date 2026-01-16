@@ -9,7 +9,20 @@ branding:
 inputs:
   resource-id:
     description: 'Yandex CDN Resource ID (e.g., bc8abcdef123)'
-    required: true
+    required: false
+
+  resource-cname:
+    description: 'Yandex CDN Resource CNAME (e.g., cdn.example.com)'
+    required: false
+
+  folder-id:
+    description: 'Yandex Cloud Folder ID (e.g., b1abcdef123)'
+    required: false
+  
+  skip-not-found:
+    description: 'Skip if resource not found'
+    required: false
+    default: 'false'
 
   paths:
     description: 'Comma-separated paths to purge (e.g., "/index.html, /assets/*"). Leave empty to purge all cache'
