@@ -149,41 +149,7 @@ async function run() {
     }
 
     // Initiate cache purge
-    core.startGroup('Cache Purge');
-    core.info('Initiating cache purge...');
-    const operation = await client.purgeCache(resourceId, paths);
-
-    const operationId = operation.id;
-    core.info(`✓ Cache purge initiated`);
-    core.info(`  Operation ID: ${operationId}`);
-    core.setOutput('operation-id', operationId);
-    core.endGroup();
-    core.info('');
-
-    // Wait for completion if requested
-    if (wait) {
-      core.startGroup('Waiting for Completion');
-      const finalOperation = await client.waitForOperation(
-        operationId,
-        timeout
-      );
-      core.setOutput('status', 'DONE');
-      core.info('✓ Cache purge completed successfully!');
-
-      // Log completion details if available
-      if (finalOperation.metadata) {
-        core.debug(
-          `Operation metadata: ${JSON.stringify(finalOperation.metadata)}`
-        );
-      }
-      core.endGroup();
-    } else {
-      core.setOutput('status', 'IN_PROGRESS');
-      core.info('Cache purge initiated (not waiting for completion)');
-      core.info(
-        `You can track the operation status using operation ID: ${operationId}`
-      );
-    }
+    await client.purgeCache(resourceId, paths, { wait, timeoutSeconds: timeout });
 
     core.info('');
     core.info('=== Yandex CDN Invalidator Completed Successfully ===');
