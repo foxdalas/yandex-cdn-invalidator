@@ -36648,7 +36648,11 @@ class YandexCDNClient {
         }
 
         const nextPageToken = response.data?.nextPageToken;
-        if (!nextPageToken || typeof nextPageToken !== 'string' || nextPageToken.length === 0) {
+        if (
+          !nextPageToken ||
+          typeof nextPageToken !== 'string' ||
+          nextPageToken.length === 0
+        ) {
           return null;
         }
         pageToken = nextPageToken;
@@ -36656,7 +36660,9 @@ class YandexCDNClient {
         if (error.response) {
           const status = error.response.status;
           const message =
-            error.response.data?.message || error.response.statusText || 'Unknown error';
+            error.response.data?.message ||
+            error.response.statusText ||
+            'Unknown error';
           throw new Error(
             `Failed to list CDN resources: ${status} - ${message}. Folder: ${folderId}`
           );
@@ -36670,85 +36676,123 @@ class YandexCDNClient {
    * Purge CDN cache for specific paths or all cache
    * @param {string} resourceId - CDN Resource ID
    * @param {string[]} [paths=[]] - Array of paths to purge (empty = full purge)
-   * @returns {Promise<Object>} Operation object with id
+   * @param {{ wait?: boolean, timeoutSeconds?: number }} [options] - Waiting options
+   * @returns {Promise<void|null>} null when no paths provided, otherwise void
    * @throws {Error} If purge request fails
    */
-  async purgeCache(resourceId, paths = []) {
+  async purgeCache(resourceId, paths = [], options = {}) {
     if (!resourceId || typeof resourceId !== 'string') {
       throw new Error('Resource ID is required and must be a string');
     }
 
     const url = `/cdn/v1/cache/${resourceId}:purge`;
+    const wait = options?.wait;
+    const timeoutSeconds = options?.timeoutSeconds;
+    
 
-    // Build request body
-    // If paths array is empty, send empty object for full purge
-    const requestBody = paths.length > 0 ? { paths } : {};
-
-    core.info(`Purging CDN cache for resource: ${resourceId}`);
-    if (paths.length > 0) {
-      core.info(`Paths to purge (${paths.length}): ${JSON.stringify(paths)}`);
-    } else {
+    // If paths array is empty, only log and return null (no full purge)
+    if (paths.length === 0) {
+      core.info(`Purging CDN cache for resource: ${resourceId}`);
       core.info('Purging ALL cache (full purge - no specific paths)');
+      return;
     }
 
-    try {
-      const response = await retryWithBackoff(
-        async () => {
-          return await this.cdnClient.post(url, requestBody);
-        },
-        {
-          maxAttempts: 12,
-          initialDelay: 10000,
-          maxDelay: 120000,
-          factor: 1.5,
-          onRetry: ({ attempt, maxAttempts, delay, error }) => {
-            const statusCode = error.response?.status || 'N/A';
-            const errorMsg =
-              error.response?.data?.message || error.message || 'Unknown error';
-            core.warning(
-              `Retry attempt ${attempt}/${maxAttempts} after ${delay / 1000}s. ` +
-                `Error: ${errorMsg} (HTTP ${statusCode})`
-            );
+    let i = 0;
+    while (true) {
+      const batch = paths.slice(10 * i, 10 * (i + 1));
+      if (batch.length === 0) {
+        break;
+      }
+
+      // Per-batch logging
+      core.startGroup(`Cache Purge Batch ${i + 1}`);
+      core.info(`Purging CDN cache for resource: ${resourceId}`);
+      core.info(`Paths to purge (${batch.length}): ${JSON.stringify(batch)}`);
+
+      const requestBody = { paths: batch };
+      try {
+        const response = await retryWithBackoff(
+          async () => {
+            return await this.cdnClient.post(url, requestBody);
           },
-        }
-      );
-
-      if (!response.data || !response.data.id) {
-        throw new Error(
-          'Invalid response from CDN purge API: missing operation ID'
+          {
+            maxAttempts: 12,
+            initialDelay: 10000,
+            maxDelay: 120000,
+            factor: 1.5,
+            onRetry: ({ attempt, maxAttempts, delay, error }) => {
+              const statusCode = error.response?.status || 'N/A';
+              const errorMsg =
+                error.response?.data?.message || error.message || 'Unknown error';
+              core.warning(
+                `Retry attempt ${attempt}/${maxAttempts} after ${delay / 1000}s. ` +
+                  `Error: ${errorMsg} (HTTP ${statusCode})`
+              );
+            },
+          }
         );
-      }
 
-      core.info(`Cache purge initiated. Operation ID: ${response.data.id}`);
-      return response.data;
-    } catch (error) {
-      if (error.response) {
-        const status = error.response.status;
-        const message =
-          error.response.data?.message || error.response.statusText;
-
-        if (status === 404) {
+        if (!response.data || !response.data.id) {
           throw new Error(
-            `CDN Resource not found: ${resourceId}. ` +
-              'Please verify the resource ID is correct.'
-          );
-        } else if (status === 403) {
-          throw new Error(
-            `Permission denied for resource: ${resourceId}. ` +
-              'Ensure the service account has "cdn.editor" role or higher.'
-          );
-        } else if (status === 401) {
-          throw new Error(
-            'Authentication failed. IAM token may be expired or invalid.'
-          );
-        } else {
-          throw new Error(
-            `CDN purge failed: ${status} - ${message}. Resource: ${resourceId}`
+            'Invalid response from CDN purge API: missing operation ID'
           );
         }
+
+        core.info(`Cache purge initiated. Operation ID: ${response.data.id}`);
+        if (response.data.metadata) {
+          core.debug(
+            `Operation metadata (start): ${JSON.stringify(response.data.metadata)}`
+          );
+        }
+        if (wait) {
+          core.info(
+            `Waiting for batch operation to complete... Timeout: ${timeoutSeconds} seconds`
+          );
+          const finalOperation = await this.waitForOperation(
+            response.data.id,
+            timeoutSeconds
+          );
+          core.info('Batch operation completed successfully');
+          if (finalOperation?.metadata) {
+            core.debug(
+              `Operation metadata (final): ${JSON.stringify(finalOperation.metadata)}`
+            );
+          }
+        }
+      } catch (error) {
+        if (error.response) {
+          const status = error.response.status;
+          const message =
+            error.response.data?.message || error.response.statusText;
+
+          if (status === 404) {
+            throw new Error(
+              `CDN Resource not found: ${resourceId}. ` +
+                'Please verify the resource ID is correct.'
+            );
+          } else if (status === 403) {
+            throw new Error(
+              `Permission denied for resource: ${resourceId}. ` +
+                'Ensure the service account has "cdn.editor" role or higher.'
+            );
+          } else if (status === 401) {
+            throw new Error(
+              'Authentication failed. IAM token may be expired or invalid.'
+            );
+          } else {
+            throw new Error(
+              `CDN purge failed: ${status} - ${message}. Resource: ${resourceId}`
+            );
+          }
+        }
+        throw error;
       }
-      throw error;
+
+      i++;
+      core.endGroup();
     }
+
+    return;
   }
 
   /**
@@ -36949,16 +36993,20 @@ async function run() {
     }
 
     if (resourceId && resourceCname) {
-      throw new Error('Only one of resource-id or resource-cname must be provided');
+      throw new Error(
+        'Only one of resource-id or resource-cname must be provided'
+      );
     }
 
-    if (resourceId) {    
+    if (resourceId) {
       // Validate resource ID
       validateResourceId(resourceId);
     }
 
     if (resourceCname && !folderId) {
-      throw new Error('folder-id must be provided when resource-cname is provided');
+      throw new Error(
+        'folder-id must be provided when resource-cname is provided'
+      );
     }
 
     // Parse timeout
@@ -37015,41 +37063,7 @@ async function run() {
     }
 
     // Initiate cache purge
-    core.startGroup('Cache Purge');
-    core.info('Initiating cache purge...');
-    const operation = await client.purgeCache(resourceId, paths);
-
-    const operationId = operation.id;
-    core.info(`✓ Cache purge initiated`);
-    core.info(`  Operation ID: ${operationId}`);
-    core.setOutput('operation-id', operationId);
-    core.endGroup();
-    core.info('');
-
-    // Wait for completion if requested
-    if (wait) {
-      core.startGroup('Waiting for Completion');
-      const finalOperation = await client.waitForOperation(
-        operationId,
-        timeout
-      );
-      core.setOutput('status', 'DONE');
-      core.info('✓ Cache purge completed successfully!');
-
-      // Log completion details if available
-      if (finalOperation.metadata) {
-        core.debug(
-          `Operation metadata: ${JSON.stringify(finalOperation.metadata)}`
-        );
-      }
-      core.endGroup();
-    } else {
-      core.setOutput('status', 'IN_PROGRESS');
-      core.info('Cache purge initiated (not waiting for completion)');
-      core.info(
-        `You can track the operation status using operation ID: ${operationId}`
-      );
-    }
+    await client.purgeCache(resourceId, paths, { wait, timeoutSeconds: timeout });
 
     core.info('');
     core.info('=== Yandex CDN Invalidator Completed Successfully ===');
