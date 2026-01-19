@@ -120,6 +120,7 @@ class YandexCDNClient {
     const url = `/cdn/v1/cache/${resourceId}:purge`;
     const wait = options?.wait;
     const timeoutSeconds = options?.timeoutSeconds;
+    
 
     // If paths array is empty, only log and return null (no full purge)
     if (paths.length === 0) {
@@ -154,9 +155,7 @@ class YandexCDNClient {
             onRetry: ({ attempt, maxAttempts, delay, error }) => {
               const statusCode = error.response?.status || 'N/A';
               const errorMsg =
-                error.response?.data?.message ||
-                error.message ||
-                'Unknown error';
+                error.response?.data?.message || error.message || 'Unknown error';
               core.warning(
                 `Retry attempt ${attempt}/${maxAttempts} after ${delay / 1000}s. ` +
                   `Error: ${errorMsg} (HTTP ${statusCode})`
