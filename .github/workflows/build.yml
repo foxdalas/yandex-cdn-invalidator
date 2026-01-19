@@ -45,7 +45,7 @@ jobs:
         run: npm run format
 
       - uses: stefanzweifel/git-auto-commit-action@v7
-        # if: ${{ github.ref == 'refs/heads/master' }}
+        if: ${{ github.ref == 'refs/heads/master' }}
         with:
           commit_message: 'feat(dist): update dist/index.js'
           commit_user_name: github-actions[bot]
