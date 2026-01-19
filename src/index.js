@@ -58,9 +58,6 @@ function validateResourceId(resourceId) {
  * Main action execution
  */
 async function run() {
-  core.info('Yandex CDN Invalidator!');
-  core.setFailed('test');
-  return;
   try {
     core.info('=== Yandex CDN Invalidator Started ===');
     core.info('');
