@@ -152,7 +152,10 @@ async function run() {
     }
 
     // Initiate cache purge
-    await client.purgeCache(resourceId, paths, { wait, timeoutSeconds: timeout });
+    await client.purgeCache(resourceId, paths, {
+      wait,
+      timeoutSeconds: timeout,
+    });
 
     core.info('');
     core.info('=== Yandex CDN Invalidator Completed Successfully ===');
